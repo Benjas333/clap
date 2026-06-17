@@ -218,6 +218,30 @@ fn generate_completion(completions: &mut String, cmd: &Command, is_subcommand: b
         append_value_completion_defs(arg, name, completions);
     }
 
+    let flags: Vec<_> = cmd.get_arguments().filter(|a| !a.is_positional()).collect();
+    let mut positionals: Vec<_> = cmd.get_positionals().collect();
+    positionals.sort_by_key(|arg| arg.get_index());
+
+    let last_positionals: Vec<_> = positionals
+        .iter()
+        .copied()
+        .filter(|a| a.is_last_set())
+        .collect();
+    let normal_positionals: Vec<_> = positionals
+        .iter()
+        .copied()
+        .filter(|a| !a.is_last_set())
+        .collect();
+
+    if !last_positionals.is_empty() {
+        let rest_positionals = normal_positionals
+            .iter()
+            .copied()
+            .find(|a| matches!(a.get_action(), ArgAction::Append));
+        append_double_dash_completion_def(completions, name, rest_positionals, &last_positionals);
+    }
+    positionals.sort_by_key(|arg| arg.get_index());
+
     if let Some(about) = cmd.get_about() {
         let about = single_line_styled_str(about);
         completions.push_str(format!("  # {about}\n").as_str());
@@ -229,17 +253,25 @@ fn generate_completion(completions: &mut String, cmd: &Command, is_subcommand: b
         completions.push_str(format!("  export extern {name} [\n").as_str());
     }
 
-    let flags: Vec<_> = cmd.get_arguments().filter(|a| !a.is_positional()).collect();
-    let mut positionals: Vec<_> = cmd.get_positionals().collect();
-
-    positionals.sort_by_key(|arg| arg.get_index());
-
     for arg in flags {
         append_argument(arg, name, completions);
     }
 
-    for arg in positionals {
-        append_argument(arg, name, completions);
+    for arg in &normal_positionals {
+        if !last_positionals.is_empty() && matches!(arg.get_action(), ArgAction::Append) {
+            append_rest_with_double_dash(arg, name, completions);
+        } else {
+            append_argument(arg, name, completions);
+        }
+    }
+
+    if !last_positionals.is_empty()
+        && !normal_positionals
+            .iter()
+            .any(|a| matches!(a.get_action(), ArgAction::Append))
+    {
+        completions.push_str(format!(r#"    ...args: string@"nu-complete {name} --""#).as_str());
+        completions.push('\n');
     }
 
     completions.push_str("  ]\n\n");
@@ -253,6 +285,83 @@ fn generate_completion(completions: &mut String, cmd: &Command, is_subcommand: b
 
 fn single_line_styled_str(text: &StyledStr) -> String {
     text.to_string().replace('\n', " ")
+}
+
+fn build_completion_expr(args: &[&Arg], name: &str) -> String {
+    let parts: Vec<String> = args
+        .iter()
+        .filter_map(|arg| {
+            let pv = arg.get_possible_values();
+            if !pv.is_empty() {
+                Some(format!(r#"(nu-complete {} {})"#, name, arg.get_id()))
+            } else {
+                match arg.get_value_hint() {
+                    // ValueHint::AnyPath
+                    // | ValueHint::FilePath
+                    // | ValueHint::DirPath
+                    // | ValueHint::ExecutablePath => Some("(ls | get name)".to_string()),
+                    _ => None,
+                }
+            }
+        })
+        .collect();
+
+    match parts.len() {
+        0 => "null".to_string(),
+        1 => parts[0].clone(),
+        _ => parts.join(" ++ "),
+    }
+}
+
+fn append_double_dash_completion_def(
+    s: &mut String,
+    name: &str,
+    before_rest: Option<&Arg>,
+    after_args: &[&Arg],
+) {
+    s.push_str(
+        format!(r#"  def "nu-complete {name} --" [context: string, offset: int] {{"#).as_str(),
+    );
+    s.push('\n');
+    s.push_str(
+        "    let tokens = ($context | split row ' ' | each { str trim } | where { $in != \"\" })\n",
+    );
+    s.push_str("    if (\"--\" in $tokens) {\n");
+
+    let after_expr = build_completion_expr(after_args, name);
+    s.push_str(format!("      {after_expr}\n").as_str());
+
+    s.push_str("    } else {\n");
+
+    let before_expr = match before_rest {
+        Some(arg) => {
+            let expr = build_completion_expr(&[arg], name);
+            if expr == "null" {
+                r#"["--"]"#.to_string()
+            } else {
+                format!(r#"{expr} ++ ["--"]"#)
+            }
+        }
+        None => r#"["--"]"#.to_string(),
+    };
+    s.push_str(format!("      {before_expr}\n").as_str());
+
+    s.push_str("    }\n");
+    s.push_str("  }\n\n");
+}
+
+fn append_rest_with_double_dash(arg: &Arg, name: &str, s: &mut String) {
+    s.push_str(format!(r#"    ...{}: string@"nu-complete {name} --""#, arg.get_id()).as_str());
+
+    if let Some(help) = arg.get_help() {
+        let indent: usize = 30;
+        let width = match s.lines().last() {
+            Some(line) => indent.saturating_sub(line.len()),
+            None => 0,
+        };
+        s.push_str(format!("{:>width$}# {}", ' ', single_line_styled_str(help)).as_str());
+    }
+    s.push('\n');
 }
 
 #[doc = include_str!("../README.md")]
