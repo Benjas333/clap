@@ -295,13 +295,7 @@ fn build_completion_expr(args: &[&Arg], name: &str) -> String {
             if !pv.is_empty() {
                 Some(format!(r#"(nu-complete {} {})"#, name, arg.get_id()))
             } else {
-                match arg.get_value_hint() {
-                    // ValueHint::AnyPath
-                    // | ValueHint::FilePath
-                    // | ValueHint::DirPath
-                    // | ValueHint::ExecutablePath => Some("(ls | get name)".to_string()),
-                    _ => None,
-                }
+                None
             }
         })
         .collect();
@@ -336,13 +330,19 @@ fn append_double_dash_completion_def(
     let before_expr = match before_rest {
         Some(arg) => {
             let expr = build_completion_expr(&[arg], name);
+            // if expr == "null" {
+            //     r#"["--"]"#.to_string()
+            // } else {
+            //     format!(r#"{expr} ++ ["--"]"#)
+            // }
             if expr == "null" {
-                r#"["--"]"#.to_string()
+                expr
             } else {
-                format!(r#"{expr} ++ ["--"]"#)
+                format!(r#"{expr}"#)
             }
         }
-        None => r#"["--"]"#.to_string(),
+        // None => r#"["--"]"#.to_string(),
+        None => "null".to_string(),
     };
     s.push_str(format!("      {before_expr}\n").as_str());
 

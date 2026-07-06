@@ -149,6 +149,15 @@ module completions {
   export extern "test pacman help help" [
   ]
 
+  def "nu-complete test last --" [context: string, offset: int] {
+    let tokens = ($context | split row ' ' | each { str trim } | where { $in != "" })
+    if ("--" in $tokens) {
+      null
+    } else {
+      null
+    }
+  }
+
   export extern "test last" [
     --global                  # everywhere
     --help(-h)                # Print help
