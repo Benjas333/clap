@@ -137,7 +137,7 @@ fn append_argument(arg: &Arg, name: &str, s: &mut String) {
     if arg.is_positional() {
         // rest arguments
         if arg.is_last_set() {
-            // skipped, as it's not currently supported by nushell
+            // skipped, as they are implemented in other function
             return;
         }
 
@@ -210,11 +210,6 @@ fn generate_completion(completions: &mut String, cmd: &Command, is_subcommand: b
     let name = cmd.get_bin_name().expect("Failed to get bin name");
 
     for arg in cmd.get_arguments() {
-        if arg.is_last_set() {
-            // skipped, as it's not currently supported by nushell
-            continue;
-        }
-
         append_value_completion_defs(arg, name, completions);
     }
 

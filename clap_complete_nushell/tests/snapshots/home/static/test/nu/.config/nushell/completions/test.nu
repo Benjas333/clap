@@ -163,10 +163,24 @@ module completions {
     --help(-h)                # Print help
     --version(-V)             # Print version
     first?: string
+    ...args: string@"nu-complete test last --"
   ]
 
   def "nu-complete test lastHint first" [] {
     [ "bash" "fish" "zsh" ]
+  }
+
+  def "nu-complete test lastHint free" [] {
+    [ "nushell" "powershell" ]
+  }
+
+  def "nu-complete test lastHint --" [context: string, offset: int] {
+    let tokens = ($context | split row ' ' | each { str trim } | where { $in != "" })
+    if ("--" in $tokens) {
+      (nu-complete test lastHint free)
+    } else {
+      null
+    }
   }
 
   export extern "test lastHint" [
@@ -174,6 +188,7 @@ module completions {
     --help(-h)                # Print help
     --version(-V)             # Print version
     first: string@"nu-complete test lastHint first"
+    ...args: string@"nu-complete test lastHint --"
   ]
 
   export extern "test alias" [
